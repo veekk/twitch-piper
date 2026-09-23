@@ -1,0 +1,193 @@
+# Twitch × Piper
+
+A Linux desktop app that reads Twitch chat aloud using local [Piper TTS](https://github.com/OHF-Voice/piper1-gpl). Built with Qt and KDE Breeze styling. Speech is generated on your computer; no cloud TTS account or paid API key is needed.
+
+## Features
+
+- Read a Twitch channel with automatic reconnection and optional auto-connect at startup.
+- Choose one Piper voice, with voices grouped by language.
+- Adjust speed, volume, speaker ID, and message length.
+- Customize nickname pronunciation, word aliases, and the “says” phrase.
+- Suppress repeated nicknames, commands, links, or selected users.
+- Pause, skip, clear the queue, and run in the system tray.
+- Use Plasma colors, Breeze Light, or Breeze Dark.
+
+## Prerequisites
+
+| Requirement | Purpose |
+| --- | --- |
+| Linux graphical desktop with working audio | Run the interface and hear speech; KDE Plasma is recommended. |
+| Python 3.10+ and PySide6 | Run the app and its Qt interface. Use a Python version supported by your installed dependency packages. |
+| Piper command-line executable | Generate speech. The app accepts `piper-tts`, `piper`, or an absolute executable path. |
+| A Piper `.onnx` model and matching `.onnx.json` file | Supply a voice. Both files must be in the same directory. |
+| `aplay` or `ffplay` | Play generated audio. The app prefers `aplay` when both are installed. |
+| Internet connection | Read Twitch chat and download dependencies/voices during setup. |
+| Qt 6 Breeze style plugin — optional | Native Breeze controls. The app falls back to Fusion if the plugin is unavailable. |
+
+Development and local verification used EndeavourOS/Arch Linux, Python 3.14, PySide6, Breeze, and the `piper-tts-bin` package. Other Linux setups have not been verified end to end. Windows and macOS are not currently documented targets.
+
+## Installation
+
+### 1. Install system dependencies
+
+**Arch Linux / EndeavourOS:**
+
+```bash
+sudo pacman -Syu --needed git python python-pip pyside6 breeze alsa-utils
+```
+
+This provides Qt/PySide6, native Breeze styling, and `aplay`. Piper and a voice are installed below. See the [Arch PySide6 package](https://archlinux.org/packages/extra/x86_64/pyside6/) for package details.
+
+**Debian / Ubuntu:**
+
+```bash
+sudo apt update
+sudo apt install git python3 python3-venv python3-pip alsa-utils
+```
+
+Install PySide6 in the virtual environment below. For native Breeze, prefer matching distribution packages for PySide6 and the **Qt 6** Breeze style plugin when your release provides them. Pip’s PySide6 includes its own Qt libraries, so a distribution’s Breeze plugin may not load with it; Fusion is the fallback. See [Qt for Python installation guidance](https://doc.qt.io/qtforpython-6/gettingstarted.html).
+
+### 2. Get the app
+
+Replace `<repository-url>` with this repository’s clone URL:
+
+```bash
+git clone <repository-url> twitch-piper
+cd twitch-piper
+```
+
+Alternatively, download and extract the repository ZIP. Run the following commands from the directory containing `app.py`, `engine.py`, and `qt_app.py`.
+
+### 3. Install Piper and Python dependencies
+
+**Arch/EndeavourOS, or another system with PySide6 already installed:**
+
+```bash
+python3 -m venv --system-site-packages .venv
+source .venv/bin/activate
+python3 -m pip install piper-tts
+```
+
+The environment reuses your distribution’s PySide6 and Qt installation for Breeze compatibility.
+
+**Without system PySide6:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install PySide6 piper-tts
+```
+
+[Piper’s installation and CLI documentation](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/CLI.md) describes the `piper-tts` Python package. It installs a command named `piper`.
+
+If you already have working PySide6 and Piper installations, you can skip creating an environment. The locally tested Arch alternative is `piper-tts-bin` from the AUR; with an existing AUR helper, install it using `yay -S piper-tts-bin`. That package provides `piper-tts` and does not require the Python Piper package. Download its voices manually as described below.
+
+### 4. Download a voice
+
+With the virtual environment active:
+
+```bash
+mkdir -p "$HOME/Downloads/piper-voices"
+python3 -m piper.download_voices en_US-lessac-medium \
+  --data-dir "$HOME/Downloads/piper-voices"
+```
+
+This downloads an English example voice. Other voices are listed in the [Piper voice catalog](https://huggingface.co/rhasspy/piper-voices).
+
+For a standalone Piper installation, download the model and config manually from the catalog—for example, the [Lessac medium files](https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/lessac/medium). The resulting pair must look like:
+
+```text
+~/Downloads/piper-voices/
+├── en_US-lessac-medium.onnx
+└── en_US-lessac-medium.onnx.json
+```
+
+Subdirectories are supported. The app scans this directory at startup, or you can choose a model anywhere using **Browse…**. Each voice’s `MODEL_CARD` describes its license; see [Piper’s voice documentation](https://github.com/OHF-Voice/piper1-gpl/blob/main/docs/VOICES.md).
+
+### 5. Start the app
+
+For a virtual-environment installation, activate it each time you open a new terminal:
+
+```bash
+cd /path/to/twitch-piper
+source .venv/bin/activate
+python3 app.py
+```
+
+For a system installation:
+
+```bash
+cd /path/to/twitch-piper
+python3 app.py
+```
+
+You can also run `bash run.sh`. It uses the `python3` on your current `PATH`; it does **not** activate `.venv` automatically. Launch as your normal desktop user, not with `sudo`.
+
+## First use
+
+1. In **Connection & setup**, check **Piper executable**. For the pip installation, use the absolute path printed by `command -v piper` in the activated environment. If both commands are installed, the app initially prefers `piper-tts`.
+2. In **Voice & filters**, choose a language and voice. Leave **Speaker ID** at `0` unless your model supports other speakers.
+3. On **Chat**, click **Read test** to verify sound.
+4. Enter a Twitch channel name or URL and click **Connect**.
+5. Click **Save settings** to keep your preferences and apply alias edits.
+
+Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply your Twitch username and a user OAuth token with `chat:read` under **Connection & setup**. Obtain tokens through [Twitch’s authorization flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/); the app does not include a login/token generator. Credentials are not saved, so auto-connect after restarting uses anonymous access.
+
+## Controls and settings
+
+- **Pause** interrupts the current utterance, holds pending messages, and stops queuing incoming chat until Resume. **Skip** interrupts the current utterance; **Clear queue** also discards pending messages.
+- **Volume** ranges from 0–100%; zero mutes. Changes apply when the next message starts playing, including messages already queued.
+- **Remove leading %** removes only that first sign; the remaining message is still read.
+- **After nickname** replaces “says”; leave it blank to omit the phrase.
+- **Skip repeated nicknames** omits the nickname for consecutive messages by the same author. It returns after another author or the configured idle gap, default 15 seconds.
+- **Aliases** use one `original = replacement` per line, such as `gamer123 = Alex` or `gg = good game`. Matches ignore case; word aliases match whole words or phrases. Save to apply edits.
+- **Auto-connect** connects when you launch the app; it does not start the app at desktop login.
+- **To tray** keeps speech running in the background. Enable **Minimize to the system tray** to give the window’s Minimize button the same behavior.
+- Closing asks whether to quit or minimize, with **Remember my choice**. Change this later using **When closing the window** in settings. Tray-menu **Quit** always exits.
+
+The queue holds the newest 30 messages and drops messages older than 45 seconds before synthesis. Moderation deletion/clear events stop speech and clear the queue. One selected voice reads all messages; language grouping is for voice selection, not automatic language detection.
+
+## Application-menu launcher (optional)
+
+The included `twitch-piper.desktop` contains paths from the development machine. Edit a copy before installing it:
+
+1. Set `Exec` to `"/absolute/path/to/twitch-piper/.venv/bin/python3" "/absolute/path/to/twitch-piper/app.py"` for a virtual environment, or `/usr/bin/python3 "/absolute/path/to/twitch-piper/app.py"` for a system installation.
+2. Set `Path` to the absolute app directory and `Icon` to its `assets/twitch-piper.png` file. Do not use `~` or shell variables in these fields.
+3. Install your edited file:
+
+```bash
+mkdir -p "$HOME/.local/share/applications"
+cp twitch-piper.desktop "$HOME/.local/share/applications/twitch-piper.desktop"
+```
+
+The launcher should then appear in your desktop’s application menu.
+
+## Troubleshooting
+
+| Problem | Check |
+| --- | --- |
+| `No module named PySide6` | Activate the environment where PySide6 is installed, or install it using the appropriate instructions above. |
+| No voices appear | Download both `.onnx` and `.onnx.json`, then restart or use **Browse…**. |
+| Piper cannot be found | Set its absolute executable path in **Connection & setup**; do not enter `python3 -m piper` in that field. |
+| Piper rejects an option | Run `piper --help` or `piper-tts --help`. The app requires `-m`, `-f`, `-s`, and `--length_scale`, with text on stdin. |
+| No sound | Resume playback, raise app/system volume, and inspect the chat log for playback errors. Test system audio with `aplay /path/to/test.wav`. |
+| Qt cannot connect to a display | Run from a terminal inside your graphical desktop session. |
+| Breeze is missing | Use matching Qt 6/PySide6/Breeze packages. Fusion remains usable without Breeze. |
+| Tray is unavailable | Use a desktop with system-tray support. The app keeps its window accessible when it cannot hide safely. |
+| Settings cause startup problems | Quit the app and rename `settings.json` to keep a backup; defaults will be used on the next launch. |
+
+## Settings and privacy
+
+Preferences are stored in `settings.json` beside the app, so keep the app in a directory you can write to. Chat history and OAuth credentials are not saved. Generated WAV files are temporary. Twitch communication uses TLS; speech generation runs locally.
+
+## Development checks
+
+From the app directory, using the same Python environment:
+
+```bash
+QT_QPA_PLATFORM=offscreen python3 -m unittest -v
+```
+
+The tests include Qt UI checks and expect local Piper/voice dependencies; the Breeze-specific test expects the Breeze plugin. Audio generation and real desktop playback should also be checked manually with **Read test**. Tests do not establish a live Twitch connection.
+
+When publishing the repository, include the source files and `assets/`, but exclude `.venv/`, `settings.json`, temporary WAV files, and downloaded voice models. There is no repository-specific dependency lockfile; installation commands above install the versions available for your system.
