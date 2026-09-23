@@ -25,6 +25,22 @@ class Tests(unittest.TestCase):
         self.assertEqual(speech_text('hello https://example.com world', settings), 'hello world')
         self.assertEqual(speech_text('\x01ACTION waves\x01', settings), 'waves')
         self.assertEqual(len(speech_text('x' * 100, settings)), 30)
+    def test_required_message_prefix(self):
+        settings = dict(commands=False, links=False, limit=100)
+        self.assertEqual(speech_text('hello', settings), 'hello')
+        settings.update(prefix_only=True, message_prefix='%')
+        self.assertEqual(speech_text('hello', settings), '')
+        self.assertEqual(speech_text(' %hello', settings), '')
+        self.assertEqual(speech_text('% hello', settings), 'hello')
+        self.assertEqual(speech_text('%', settings), '')
+        settings['strip_percent'] = True
+        self.assertEqual(speech_text('%%hello', settings), '%hello')
+        settings['message_prefix'] = '>>'
+        self.assertEqual(speech_text('>>hello', settings), 'hello')
+        self.assertEqual(speech_text('%hello', settings), '')
+        settings['prefix_only'] = False
+        self.assertEqual(speech_text('hello', settings), 'hello')
+
     def test_leading_percent_only(self):
         settings = dict(commands=False, links=False, limit=100, strip_percent=True)
         self.assertEqual(speech_text('%hello 50%', settings), 'hello 50%')

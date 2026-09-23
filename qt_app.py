@@ -51,7 +51,7 @@ class Window(QMainWindow):
         self.values = dict(engine='Piper', style_voice=CATALOG['voices'][0],
             style_python=str(BASE / '.venv-styletts2/bin/python'), style_device='Auto', style_numbers=True, channel='', model=default, piper=shutil.which('piper-tts') or shutil.which('piper') or '',
             speed='1.0', speaker='0', limit='280', ignored='nightbot, streamelements, moobot', names=True,
-            commands=True, links=True, strip_percent=False, says='says', nickname_aliases='', word_aliases='',
+            commands=True, links=True, strip_percent=False, prefix_only=False, message_prefix='%', says='says', nickname_aliases='', word_aliases='',
             skip_repeat_names=True, nickname_timeout='15', appearance='Plasma (system)', volume=100,
             auto_connect=False, minimize_to_tray=False, close_action='Ask every time')
         self.values.update({key: value for key, value in saved.items() if key in self.values})
@@ -284,6 +284,14 @@ class Window(QMainWindow):
         layout.addWidget(nicknames)
         filters = QGroupBox('Message filters')
         form = QFormLayout(filters)
+        prefix_toggle = self.check('prefix_only', 'Read only messages starting with this prefix')
+        form.addRow(prefix_toggle)
+        prefix_entry = self.entry('message_prefix')
+        prefix_entry.setPlaceholderText('%')
+        prefix_entry.setToolTip('Must be at the very beginning. The matched prefix is removed before speaking.')
+        prefix_entry.setEnabled(prefix_toggle.isChecked())
+        prefix_toggle.toggled.connect(prefix_entry.setEnabled)
+        form.addRow('Required prefix:', prefix_entry)
         for key, label in [('strip_percent', 'Remove only a leading % sign'), ('commands', 'Skip messages starting with !'), ('links', 'Remove web links from speech')]:
             form.addRow(self.check(key, label))
         ignored = self.entry('ignored')
@@ -474,6 +482,8 @@ class Window(QMainWindow):
     def settings(self, aliases=None):
         s = self.raw_settings()
         s.update(aliases or {})
+        if s['prefix_only'] and (not s['message_prefix'] or s['message_prefix'].isspace()):
+            raise ValueError('Enter a non-empty message prefix, such as %.')
         for key in ('nickname_aliases', 'word_aliases'):
             s[key] = parse_aliases(s[key])
         s.update(speed=float(s['speed']), speaker=int(s['speaker']), limit=int(s['limit']), nickname_timeout=float(s['nickname_timeout']))

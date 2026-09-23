@@ -102,7 +102,12 @@ def apply_word_aliases(text, aliases):
 def speech_text(text, settings):
     if text.startswith('\x01ACTION ') and text.endswith('\x01'):
         text = text[8:-1]
-    if settings.get('strip_percent', False) and text.startswith('%'):
+    if settings.get('prefix_only', False):
+        prefix = settings.get('message_prefix', '%')
+        if not prefix or not text.startswith(prefix):
+            return ''
+        text = text[len(prefix):].lstrip()
+    elif settings.get('strip_percent', False) and text.startswith('%'):
         text = text[1:].lstrip()
     if settings['commands'] and text.lstrip().startswith('!'):
         return ''
