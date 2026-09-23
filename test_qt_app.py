@@ -301,6 +301,25 @@ class BreezeTests(unittest.TestCase):
             self.assertIsNone(self.window.engine_started)
             self.assertEqual(self.window.engine_status.text(), state)
 
+    def test_preload_startup_once_without_connecting(self):
+        self.window._startup_attempted = False
+        self.window.inputs['preload_engine'].setChecked(True)
+        self.window.inputs['auto_connect'].setChecked(False)
+        with patch.object(self.window.speaker, 'preload') as preload:
+            self.window.startup_connect()
+            self.window.startup_connect()
+            preload.assert_called_once()
+        self.window.save()
+        self.assertTrue(json.loads(self.path.read_text())['preload_engine'])
+
+    def test_demo_bypasses_chat_prefix_and_nickname(self):
+        self.window.inputs['prefix_only'].setChecked(True)
+        with patch.object(self.window.speaker, 'enqueue') as enqueue:
+            self.window.demo_voice()
+            enqueue.assert_called_once()
+            self.assertEqual(len(enqueue.call_args.args), 2)
+            self.assertEqual(enqueue.call_args.args[0], self.window.sample.text())
+
 
 if __name__ == '__main__':
     unittest.main()

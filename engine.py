@@ -301,6 +301,12 @@ class Speaker(threading.Thread):
             self.items.append((time.monotonic(), text, snapshot))
             self.cv.notify()
 
+    def preload(self, settings):
+        snapshot = settings.copy()
+        snapshot['_preload'] = True
+        text = 'Привіт.' if settings.get('engine') == 'StyleTTS2 Ukrainian' else 'Hello.'
+        self.enqueue(text, snapshot)
+
     def clear(self):
         with self.cv:
             self.items.clear()
@@ -354,8 +360,9 @@ class Speaker(threading.Thread):
                 if author is not None:
                     with self.cv:
                         text = self.nickname_history.format(author, text, settings, time.monotonic())
-                self.emit('speech', text)
-                self.emit('engine', (engine_name + ' · Starting speech engine', True))
+                preload = settings.get('_preload', False)
+                self.emit('speech', '' if preload else text)
+                self.emit('engine', (engine_name + (' · Preloading engine' if preload else ' · Starting speech engine'), True))
                 with tempfile.TemporaryDirectory(prefix='twitch-piper-') as temp:
                     wav = str(Path(temp) / 'speech.wav')
                     if settings.get('engine', 'Piper') == 'StyleTTS2 Ukrainian':
@@ -376,7 +383,9 @@ class Speaker(threading.Thread):
                                 '--length_scale', str(1 / settings['speed']), '-s', str(settings['speaker'])]
                         self.emit('engine', ('Piper · Loading voice and generating speech', True))
                         ready = self.execute(args, generation, (text + '\n').encode())
-                    if ready:
+                    if ready and preload:
+                        played = True  # Silent warm-up completed; keep the StyleTTS2 worker resident.
+                    elif ready:
                         with self.cv:
                             volume = self.volume
                         adjust_wav_volume(wav, volume)

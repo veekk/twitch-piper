@@ -55,7 +55,7 @@ class Window(QMainWindow):
             speed='1.0', speaker='0', limit='280', ignored='nightbot, streamelements, moobot', names=True,
             commands=True, links=True, strip_percent=False, prefix_only=False, message_prefix='%', says='says', nickname_aliases='', word_aliases='',
             skip_repeat_names=True, nickname_timeout='15', appearance='Plasma (system)', volume=100,
-            auto_connect=False, minimize_to_tray=False, close_action='Ask every time')
+            auto_connect=False, preload_engine=False, minimize_to_tray=False, close_action='Ask every time')
         self.values.update({key: value for key, value in saved.items() if key in self.values})
         self.aliases = {key: self.values[key] for key in ('nickname_aliases', 'word_aliases')}
         self.voice_paths = {}
@@ -262,6 +262,7 @@ class Window(QMainWindow):
         form.addRow('Language:', self.language_combo)
         row = QHBoxLayout()
         row.addWidget(self.voice_combo, 1)
+        row.addWidget(self.button('Demo', self.demo_voice, 'media-playback-start'))
         row.addWidget(self.button('Browse…', self.browse, 'document-open'))
         form.addRow('Voice:', row)
         self.model_hint = QLabel()
@@ -279,7 +280,13 @@ class Window(QMainWindow):
             combo.addItems(items)
             combo.setCurrentText(self.values[key])
             self.inputs[key] = combo
-            style_form.addRow(label, combo)
+            if key == 'style_voice':
+                voice_row = QHBoxLayout()
+                voice_row.addWidget(combo, 1)
+                voice_row.addWidget(self.button('Demo', self.demo_voice, 'media-playback-start'))
+                style_form.addRow(label, voice_row)
+            else:
+                style_form.addRow(label, combo)
         style_form.addRow(self.check('style_numbers', 'Read numbers as Ukrainian words'))
         style_form.addRow('Python executable:', self.entry('style_python'))
         note = QLabel('Install the optional environment from README first. The first test downloads models.\nAuto uses CUDA when available, otherwise CPU. Voices are from patriotyk’s demo.')
@@ -355,6 +362,9 @@ class Window(QMainWindow):
         layout = self.page('Connection && setup', scroll=True)
         startup = QGroupBox('Startup and window behavior')
         form = QFormLayout(startup)
+        preload = self.check('preload_engine', 'Load selected engine when the app starts')
+        preload.setToolTip('Silently prepares the selected voice. StyleTTS2 stays loaded; Piper warms file caches but starts a new process per message.')
+        form.addRow(preload)
         form.addRow(self.check('auto_connect', 'Auto-connect to the saved channel when the app starts'))
         form.addRow(self.check('minimize_to_tray', 'Minimize to the system tray'))
         self.close_action = QComboBox()
@@ -588,6 +598,18 @@ class Window(QMainWindow):
         self.chat.start()
         self.connect_button.setText('Disconnect')
 
+    def demo_voice(self):
+        try:
+            settings = self.settings()
+            text = ('Привіт! Це приклад звучання обраного українського голосу.'
+                    if settings['engine'] == 'StyleTTS2 Ukrainian' else self.sample.text())
+            if text.strip():
+                self.speaker.enqueue(text, settings)
+                if self.speaker.paused:
+                    self.status.setText('Demo queued · Resume playback to hear it')
+        except (ValueError, OSError) as exc:
+            self.error(exc)
+
     def test_voice(self):
         try:
             settings = self.settings()
@@ -667,6 +689,12 @@ class Window(QMainWindow):
         if self._closing or self._startup_attempted:
             return
         self._startup_attempted = True
+        if self.inputs['preload_engine'].isChecked():
+            try:
+                self.speaker.preload(self.settings())
+            except (ValueError, OSError) as exc:
+                self.emit('engine', ('Preload failed · ' + str(exc), False))
+                self.append('Preload failed: ' + str(exc))
         if not self.inputs['auto_connect'].isChecked() or self.chat:
             return
         if not self.channel.text().strip():
@@ -852,7 +880,18 @@ def main():
     application.setDesktopFileName('twitch-piper')
     application.setWindowIcon(QIcon(str(BASE / 'assets' / 'twitch-piper.png')))
     application.setOrganizationName('TwitchPiper')
-    window = Window()
-    application.aboutToQuit.connect(window.shutdown)
-    window.show()
-    return application.exec()
+    from single_instance import SingleInstance
+    instance = None
+    try:
+        instance = SingleInstance()
+        if not instance.owned:
+            instance.notify_existing()
+            return 0
+        window = Window()
+        instance.listen(window.restore_window)
+        application.aboutToQuit.connect(window.shutdown)
+        window.show()
+        return application.exec()
+    finally:
+        if instance is not None:
+            instance.close()

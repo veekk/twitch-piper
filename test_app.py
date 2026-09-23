@@ -34,6 +34,20 @@ class Tests(unittest.TestCase):
         self.assertIn('application.name="Twitch Piper"', env['PULSE_PROP'])
         self.assertIn('application.process.binary="twitch-piper"', env['PULSE_PROP'])
 
+    def test_preload_synthesizes_without_playback(self):
+        from unittest.mock import patch
+        done = threading.Event()
+        speaker = Speaker(lambda kind, value: done.set() if kind == 'engine' and value[0].endswith('Ready') else None)
+        try:
+            with patch.object(speaker, 'execute', return_value=True) as execute:
+                speaker.preload(dict(piper='piper', model='voice.onnx', speed=1, speaker=0))
+                self.assertTrue(done.wait(2))
+                execute.assert_called_once()
+                self.assertIn('-m', execute.call_args.args[0])
+        finally:
+            speaker.close()
+            speaker.join(2)
+
     def test_obs_playback_identity(self):
         from engine import playback_command
         from unittest.mock import patch

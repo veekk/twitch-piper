@@ -208,6 +208,8 @@ Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply 
 
 The Linux process names are `twitch-piper` for the interface and `twitch-styletts` for the StyleTTS2 worker. The command line may still show the Python interpreter; installing optional `setproctitle` in each Python environment also updates that title.
 
+Only one app instance runs per Linux user. Launching it again restores the existing window, including from the tray. The operating system releases the instance lock if the app crashes.
+
 ## Controls and settings
 
 - **Pause** interrupts the current utterance, holds pending messages, and stops queuing incoming chat until Resume. **Skip** interrupts the current utterance; **Clear queue** also discards pending messages.
@@ -219,6 +221,8 @@ The Linux process names are `twitch-piper` for the interface and `twitch-stylett
 - **After nickname** replaces “says”; leave it blank to omit the phrase.
 - **Skip repeated nicknames** omits the nickname for consecutive messages by the same author. It returns after another author or the configured idle gap, default 15 seconds.
 - **Aliases** use one `original = replacement` per line, such as `gamer123 = Alex` or `gg = good game`. Matches ignore case; word aliases match whole words or phrases. Save to apply edits.
+- **Load selected engine when the app starts** (off by default) silently prepares the saved voice. StyleTTS2 stays loaded for incoming messages; Piper only warms file caches because its CLI reloads per message. Save the preference before restarting. Engine status shows progress.
+- **Demo** beside either voice selector previews the selected voice without requiring chat or a message prefix. Demos join the speech queue; resume playback if paused.
 - **Auto-connect** connects when you launch the app; it does not start the app at desktop login.
 - **To tray** keeps speech running in the background. Enable **Minimize to the system tray** to give the window’s Minimize button the same behavior.
 - Closing asks whether to quit or minimize, with **Remember my choice**. Change this later using **When closing the window** in settings. Tray-menu **Quit** always exits.
