@@ -331,12 +331,15 @@ class Speaker(threading.Thread):
                 generation = self.generation
             if time.monotonic() - created > 45:
                 continue
+            failed, played = False, False
+            engine_name = settings.get('engine', 'Piper')
             try:
                 author = settings.get('_author')
                 if author is not None:
                     with self.cv:
                         text = self.nickname_history.format(author, text, settings, time.monotonic())
                 self.emit('speech', text)
+                self.emit('engine', (engine_name + ' · Starting speech engine', True))
                 with tempfile.TemporaryDirectory(prefix='twitch-piper-') as temp:
                     wav = str(Path(temp) / 'speech.wav')
                     if settings.get('engine', 'Piper') == 'StyleTTS2 Ukrainian':
@@ -346,7 +349,8 @@ class Speaker(threading.Thread):
                             self.process = self.style_worker.start(settings['style_python'], settings['style_device'])
                         try:
                             ready = self.style_worker.generate(text, settings, wav,
-                                lambda: self.stopped or generation != self.generation)
+                                lambda: self.stopped or generation != self.generation,
+                                progress=lambda message: self.emit('engine', ('StyleTTS2 · ' + message, True)))
                         finally:
                             with self.cv:
                                 self.process = None
@@ -354,6 +358,7 @@ class Speaker(threading.Thread):
                         self.style_worker.close()
                         args = [settings['piper'], '-m', settings['model'], '-f', wav,
                                 '--length_scale', str(1 / settings['speed']), '-s', str(settings['speaker'])]
+                        self.emit('engine', ('Piper · Loading voice and generating speech', True))
                         ready = self.execute(args, generation, (text + '\n').encode())
                     if ready:
                         with self.cv:
@@ -362,13 +367,20 @@ class Speaker(threading.Thread):
                         player = [shutil.which('aplay'), '-q', wav] if shutil.which('aplay') else [shutil.which('ffplay'), '-nodisp', '-autoexit', '-loglevel', 'error', wav]
                         with wave.open(wav, 'rb') as audio:
                             playback_timeout = max(60, audio.getnframes() / audio.getframerate() + 10)
-                        if self.execute(player, generation, timeout=playback_timeout):
+                        self.emit('engine', (engine_name + ' · Playing audio', False))
+                        played = self.execute(player, generation, timeout=playback_timeout)
+                        if played:
                             with self.cv:
                                 if generation == self.generation:
                                     self.nickname_history.completed(author, settings, time.monotonic())
             except Exception as exc:
+                failed = True
+                self.emit('engine', ('Engine error · ' + str(exc), False))
                 self.emit('error', str(exc))
             finally:
+                if not failed:
+                    state = 'Ready' if played else 'Stopped · Next message may reload the model'
+                    self.emit('engine', (engine_name + ' · ' + state, False))
                 self.emit('speech', '')
 
     def close(self):

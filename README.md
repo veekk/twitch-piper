@@ -209,6 +209,7 @@ Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply 
 ## Controls and settings
 
 - **Pause** interrupts the current utterance, holds pending messages, and stops queuing incoming chat until Resume. **Skip** interrupts the current utterance; **Clear queue** also discards pending messages.
+- **Engine status** shows startup, pronunciation-resource/model/voice loading, speech generation (with part counts), playback, readiness, and errors. Loading displays an animated activity bar and elapsed time; downloads do not expose a reliable percentage. First use may need several minutes. Skip/Pause can cancel synthesis.
 - **App load** shows CPU, RAM, NVIDIA GPU activity, and VRAM for the app and its child processes, including the speech worker. CPU 100% means one logical core; RAM is summed resident memory and may double-count shared pages. GPU metrics use `nvidia-smi` per-process statistics; unsupported or inaccessible metrics display **N/A**. Sampling runs in the background roughly every 1–4 seconds.
 - **Volume** ranges from 0–100%; zero mutes. Changes apply when the next message starts playing, including messages already queued.
 - **Read only messages starting with this prefix** is disabled by default, with `%` as the default prefix. Enable it to accept only messages beginning exactly with your chosen prefix; the prefix is removed before speech. Disable it to remove this restriction. Other enabled message filters still apply.

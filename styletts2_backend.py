@@ -35,9 +35,11 @@ class StyleWorker:
             self.key = key
         return self.process
 
-    def generate(self, text, settings, output, cancelled, timeout=600):
+    def generate(self, text, settings, output, cancelled, timeout=600, progress=lambda message: None):
         reply = Path(output).with_suffix('.json')
-        request = dict(text=text, voice=settings['style_voice'], speed=settings['speed'],
+        progress_file = Path(output).with_suffix('.progress.json')
+        previous_progress = None
+        request = dict(progress=str(progress_file), text=text, voice=settings['style_voice'], speed=settings['speed'],
                        device=settings['style_device'], numbers=settings.get('style_numbers', True), output=output, reply=str(reply))
         try:
             self.process.stdin.write((json.dumps(request) + '\n').encode())
@@ -47,6 +49,11 @@ class StyleWorker:
                 if cancelled():
                     self.close()
                     return False
+                if progress_file.exists():
+                    message = json.loads(progress_file.read_text())
+                    if message != previous_progress:
+                        progress(message)
+                        previous_progress = message
                 if reply.exists():
                     result = json.loads(reply.read_text())
                     if 'error' in result:

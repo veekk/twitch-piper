@@ -283,6 +283,24 @@ class BreezeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Install StyleTTS2'):
             self.window.settings()
 
+    def test_engine_progress_and_terminal_states(self):
+        self.window.emit('engine', ('Loading model', True))
+        self.window.poll()
+        self.assertFalse(self.window.engine_progress.isHidden())
+        started = self.window.engine_started
+        self.window.engine_started -= 5
+        self.window.poll()
+        self.assertIn('5s elapsed', self.window.engine_status.text())
+        self.window.emit('engine', ('Generating speech · part 1/2', True))
+        self.window.poll()
+        self.assertEqual(self.window.engine_started, started - 5)
+        for state in ('Playing audio', 'Ready', 'Stopped', 'Engine error'):
+            self.window.emit('engine', (state, False))
+            self.window.poll()
+            self.assertTrue(self.window.engine_progress.isHidden())
+            self.assertIsNone(self.window.engine_started)
+            self.assertEqual(self.window.engine_status.text(), state)
+
 
 if __name__ == '__main__':
     unittest.main()

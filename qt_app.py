@@ -9,12 +9,13 @@ import queue
 import re
 import shutil
 import sys
+import time
 
 from PySide6.QtCore import QEvent, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QPalette
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
-    QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QSpinBox, QStyleFactory,
+    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSlider, QSpinBox, QStyleFactory,
     QSystemTrayIcon, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
 from resource_monitor import ResourceMonitor
 from styletts2_backend import CATALOG
@@ -136,6 +137,20 @@ class Window(QMainWindow):
         self.now = QLabel('Speech idle')
         self.now.setWordWrap(True)
         layout.addWidget(self.now)
+        self.engine_message = 'Engine idle · Loads when the first message is read'
+        self.engine_started = None
+        self.engine_status = QLabel(self.engine_message)
+        self.engine_status.setWordWrap(True)
+        self.engine_progress = QProgressBar()
+        self.engine_progress.setRange(0, 0)
+        self.engine_progress.setTextVisible(False)
+        self.engine_progress.setFixedWidth(110)
+        self.engine_progress.setFixedHeight(12)
+        self.engine_progress.hide()
+        engine_row = QHBoxLayout()
+        engine_row.addWidget(self.engine_status, 1)
+        engine_row.addWidget(self.engine_progress)
+        layout.addLayout(engine_row)
         self.resources = ResourceMonitor()
         self.load_label = QLabel(self.resources.latest)
         self.load_label.setWordWrap(True)
@@ -623,6 +638,13 @@ class Window(QMainWindow):
                     self.status.setText(str(exc))
             elif kind == 'status':
                 self.status.setText(value)
+            elif kind == 'engine':
+                self.engine_message, busy = value
+                if busy and self.engine_started is None:
+                    self.engine_started = time.monotonic()
+                elif not busy:
+                    self.engine_started = None
+                self.engine_progress.setVisible(busy)
             elif kind == 'speech':
                 self.speaking = value
             elif kind == 'moderation':
@@ -630,6 +652,8 @@ class Window(QMainWindow):
                 self.append('Moderation event: speech queue cleared.')
             elif kind in ('error', 'notice'):
                 self.append(f'{kind.title()}: {value}')
+        elapsed = f' · {int(time.monotonic() - self.engine_started)}s elapsed' if self.engine_started is not None else ''
+        self.engine_status.setText(self.engine_message + elapsed)
         self.now.setText('Paused' if self.speaker.paused else ('Speaking: ' + self.speaking[:140] if self.speaking else 'Speech idle'))
         self.queue_status.setText(f'{len(self.speaker.items)} / 30 queued')
 
