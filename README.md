@@ -23,9 +23,13 @@ The app in Breeze Light, using default settings and example aliases.
 <details>
 <summary>Voice selection, filters, aliases, and settings</summary>
 
-**Voices grouped by language, nickname options, and message filters**
+**Voices grouped by language**
 
-![Voice and filters tab](assets/screenshots/voice-filters.png)
+![Piper voice selection](assets/screenshots/voice-filters.png)
+
+**Nickname options and message filters**
+
+![Filters tab](assets/screenshots/filters.png)
 
 **Nickname and word aliases**
 
@@ -181,11 +185,11 @@ uv pip install --python .venv-styletts2/bin/python --reinstall-package torch --r
 
 Run the check in your desktop terminal; restricted sandboxes may hide GPU devices. Quit the app completely (including its tray icon) and reopen it after changing PyTorch packages. Select **CUDA** or **Auto** in the device selector. If GPU availability is false in your desktop terminal too, check `nvidia-smi` before troubleshooting the app.
 
-Launch the app using its usual Python environment. In **Voice & filters**:
+Launch the app using its usual Python environment. In **Voice**:
 
 1. Select **Speech engine → StyleTTS2 Ukrainian**.
 2. Choose a voice and **Auto**, **CPU**, or **CUDA**. Auto selects CUDA only when available to the worker.
-3. Leave **Python executable** pointing to `.venv-styletts2/bin/python`, or enter the absolute path to your own environment’s Python.
+3. Leave **Preferences → StyleTTS2 Python** pointing to `.venv-styletts2/bin/python`, or enter the absolute path to your own environment’s Python under **Preferences → Local speech engine**.
 4. Use **Read test** with Ukrainian text, such as `Привіт! Дякую за повідомлення.`, then save settings.
 
 The first test downloads the speech model, stress-processing resources, and selected voice preset. Allow several minutes and several GB of disk space. By default caches live in `.cache-styletts2/` beside the app; existing `HF_HOME`, `STANZA_RESOURCES_DIR`, `TORCH_HOME`, and `NUMBA_CACHE_DIR` settings are respected. A newly selected voice may need a small additional download. Cached assets support subsequent local use.
@@ -198,13 +202,13 @@ The voice catalog records the demo revision in `styletts2_voices.json`. Dependen
 
 ## First use
 
-1. In **Connection & setup**, check **Piper executable**. For the pip installation, use the absolute path printed by `command -v piper` in the activated environment. If both commands are installed, the app initially prefers `piper-tts`.
-2. In **Voice & filters**, choose a language and voice. Leave **Speaker ID** at `0` unless your model supports other speakers.
-3. On **Chat**, click **Read test** to verify sound.
+1. In **Preferences**, check **Piper executable**. For the pip installation, use the absolute path printed by `command -v piper` in the activated environment. If both commands are installed, the app initially prefers `piper-tts`.
+2. In **Voice**, choose a language and voice. Leave **Speaker ID** at `0` unless your model supports other speakers.
+3. On **Voice**, click **Read test** to verify sound.
 4. Enter a Twitch channel name or URL and click **Connect**.
 5. Click **Save settings** to keep your preferences and apply alias edits.
 
-Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply your Twitch username and a user OAuth token with `chat:read` under **Connection & setup**. Obtain tokens through [Twitch’s authorization flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/); the app does not include a login/token generator. Credentials are not saved, so auto-connect after restarting uses anonymous access.
+Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply your Twitch username and a user OAuth token with `chat:read` under **Preferences**. Obtain tokens through [Twitch’s authorization flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/); the app does not include a login/token generator. Credentials are not saved, so auto-connect after restarting uses anonymous access.
 
 The Linux process names are `twitch-piper` for the interface and `twitch-styletts` for the StyleTTS2 worker. The command line may still show the Python interpreter; installing optional `setproctitle` in each Python environment also updates that title.
 
@@ -216,12 +220,12 @@ Only one app instance runs per Linux user. Launching it again restores the exist
 - **Engine status** shows startup, pronunciation-resource/model/voice loading, speech generation (with part counts), playback, readiness, and errors. Loading displays an animated activity bar and elapsed time; downloads do not expose a reliable percentage. First use may need several minutes. Skip/Pause can cancel synthesis.
 - **App load** shows CPU, RAM, NVIDIA GPU activity, and VRAM for the app and its child processes, including the speech worker. CPU 100% means one logical core; RAM is summed resident memory and may double-count shared pages. GPU metrics use `nvidia-smi` per-process statistics; unsupported or inaccessible metrics display **N/A**. Sampling runs in the background roughly every 1–4 seconds.
 - **Volume** ranges from 0–100%; zero mutes. Changes apply when the next message starts playing, including messages already queued.
-- **Read only messages starting with this prefix** is disabled by default, with `%` as the default prefix. Enable it to accept only messages beginning exactly with your chosen prefix; the prefix is removed before speech. Disable it to remove this restriction. Other enabled message filters still apply.
+- **Require a message prefix** is disabled by default, with `%` as the default prefix. Enable it to accept only messages beginning exactly with your chosen prefix; the prefix is removed before speech. Disable it to remove this restriction. Other enabled message filters still apply.
 - **Remove leading %** removes only that first sign; the remaining message is still read.
 - **After nickname** replaces “says”; leave it blank to omit the phrase.
 - **Skip repeated nicknames** omits the nickname for consecutive messages by the same author. It returns after another author or the configured idle gap, default 15 seconds.
 - **Aliases** use one `original = replacement` per line, such as `gamer123 = Alex` or `gg = good game`. Matches ignore case; word aliases match whole words or phrases. Save to apply edits.
-- **Load selected engine when the app starts** (off by default) silently prepares the saved voice. StyleTTS2 stays loaded for incoming messages; Piper only warms file caches because its CLI reloads per message. Save the preference before restarting. Engine status shows progress.
+- **Preload the selected engine** (off by default) silently prepares the saved voice. StyleTTS2 stays loaded for incoming messages; Piper only warms file caches because its CLI reloads per message. Save the preference before restarting. Engine status shows progress.
 - **Demo** beside either voice selector previews the selected voice without requiring chat or a message prefix. Demos join the speech queue; resume playback if paused.
 - **Auto-connect** connects when you launch the app; it does not start the app at desktop login.
 - **To tray** keeps speech running in the background. Enable **Minimize to the system tray** to give the window’s Minimize button the same behavior.
@@ -256,8 +260,8 @@ The app keeps a persistent audio client connected from startup, and its playback
 | --- | --- |
 | `No module named PySide6` | Activate the environment where PySide6 is installed, or install it using the appropriate instructions above. |
 | No voices appear | Download both `.onnx` and `.onnx.json`, then restart or use **Browse…**. |
-| StyleTTS2 reports a missing module | Install `requirements-styletts2.txt` in the exact Python environment selected under Voice & filters. |
-| Piper cannot be found | Set its absolute executable path in **Connection & setup**; do not enter `python3 -m piper` in that field. |
+| StyleTTS2 reports a missing module | Install `requirements-styletts2.txt` in the exact Python environment selected under Voice. |
+| Piper cannot be found | Set its absolute executable path in **Preferences**; do not enter `python3 -m piper` in that field. |
 | Piper rejects an option | Run `piper --help` or `piper-tts --help`. The app requires `-m`, `-f`, `-s`, and `--length_scale`, with text on stdin. |
 | No sound | Resume playback, raise app/system volume, and inspect the chat log for playback errors. Test system audio with `aplay /path/to/test.wav`. |
 | Qt cannot connect to a display | Run from a terminal inside your graphical desktop session. |

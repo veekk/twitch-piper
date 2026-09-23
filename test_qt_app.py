@@ -38,7 +38,7 @@ class BreezeTests(unittest.TestCase):
         self.window.appearance.setCurrentText('Breeze Dark')
         dark = self.application.palette().color(QPalette.ColorRole.Window).lightness()
         self.assertGreater(light, dark)
-        self.assertEqual(self.window.tabs.count(), 4)
+        self.assertEqual(self.window.tabs.count(), 5)
 
     def test_settings_aliases_and_secret_exclusion(self):
         self.window.alias_editors['nickname_aliases'].setPlainText('viewer = Alex')

@@ -13,7 +13,7 @@ import time
 
 from PySide6.QtCore import QEvent, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QIcon, QPalette
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBox,
+from PySide6.QtWidgets import (QApplication, QBoxLayout, QCheckBox, QComboBox, QDoubleSpinBox,
     QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
     QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSlider, QSpinBox, QStyleFactory,
     QSystemTrayIcon, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
@@ -35,7 +35,7 @@ class Window(QMainWindow):
         self.settings_path = Path(settings_path) if settings_path else BASE / 'settings.json'
         self.setWindowTitle('Twitch × Piper')
         self.setWindowIcon(QIcon(str(BASE / 'assets' / 'twitch-piper.png')))
-        self.resize(980, 790)
+        self.resize(1040, 820)
         self.setMinimumSize(760, 650)
         self.events = queue.Queue(maxsize=2000)
         self.chat = None
@@ -44,6 +44,7 @@ class Window(QMainWindow):
         self.speaker = Speaker(self.emit)
         self.speaking = ''
         self.inputs = {}
+        self.responsive_rows = []
         try:
             saved = json.loads(self.settings_path.read_text())
         except (OSError, ValueError):
@@ -69,7 +70,7 @@ class Window(QMainWindow):
         self.setCentralWidget(outer)
         layout = QVBoxLayout(outer)
         layout.setContentsMargins(20, 18, 20, 18)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
         header = QHBoxLayout()
         title = QLabel('Twitch × Piper')
         font = QFont(title.font())
@@ -81,7 +82,7 @@ class Window(QMainWindow):
         header.addWidget(logo)
         header.addWidget(title)
         header.addStretch()
-        header.addWidget(QLabel('Local chat reader'))
+        header.addWidget(QLabel('Local speech · Twitch chat'))
         self.tray_button = self.button('To tray', self.hide_to_tray, 'window-minimize')
         self.tray_button.setToolTip('Keep reading chat in the background; restore from the tray icon.')
         header.addWidget(self.tray_button)
@@ -105,10 +106,14 @@ class Window(QMainWindow):
         self.build_aliases()
         self.build_setup()
         save_row = QHBoxLayout()
-        self.saved_status = QLabel('Save settings to apply alias edits.')
+        self.saved_status = QLabel('Save to keep preferences and apply alias edits.')
         save_row.addWidget(self.saved_status, 1)
         save_row.addWidget(self.button('Save settings', self.apply_settings, 'document-save'))
         layout.addLayout(save_row)
+        playback = QGroupBox('Playback')
+        playback_layout = QVBoxLayout(playback)
+        playback_layout.setSpacing(6)
+        layout.addWidget(playback)
         controls = QHBoxLayout()
         self.pause_button = self.button('Pause', self.pause, 'media-playback-pause')
         controls.addWidget(self.pause_button)
@@ -134,10 +139,10 @@ class Window(QMainWindow):
         controls.addSpacing(12)
         self.queue_status = QLabel('0 / 30 queued')
         controls.addWidget(self.queue_status)
-        layout.addLayout(controls)
+        playback_layout.addLayout(controls)
         self.now = QLabel('Speech idle')
         self.now.setWordWrap(True)
-        layout.addWidget(self.now)
+        playback_layout.addWidget(self.now)
         self.engine_message = 'Engine idle · Loads when the first message is read'
         self.engine_started = None
         self.engine_status = QLabel(self.engine_message)
@@ -151,18 +156,18 @@ class Window(QMainWindow):
         engine_row = QHBoxLayout()
         engine_row.addWidget(self.engine_status, 1)
         engine_row.addWidget(self.engine_progress)
-        layout.addLayout(engine_row)
+        playback_layout.addLayout(engine_row)
         self.audio_identity = AudioIdentity()
         self.audio_identity_label = QLabel(self.audio_identity.status())
         self.audio_identity_label.setWordWrap(True)
-        layout.addWidget(self.audio_identity_label)
+        self.diagnostics_layout.addWidget(self.audio_identity_label)
         self.resources = ResourceMonitor()
         self.load_label = QLabel(self.resources.latest)
         self.load_label.setWordWrap(True)
         self.load_label.setToolTip('App and child processes, including the speech worker. CPU: 100% = one logical core. '
             'RAM: summed resident memory (shared pages may be counted twice). GPU: NVIDIA per-process SM utilization; '
             'VRAM: GPU memory. N/A means unavailable or unsupported. Samples update about every 1–4 seconds.')
-        layout.addWidget(self.load_label)
+        playback_layout.addWidget(self.load_label)
         self.apply_appearance(self.values['appearance'])
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.poll)
@@ -172,6 +177,13 @@ class Window(QMainWindow):
         self.startup_timer.setSingleShot(True)
         self.startup_timer.timeout.connect(self.startup_connect)
         self.startup_timer.start(0)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        direction = (QBoxLayout.Direction.TopToBottom if self.width() < 900
+                     else QBoxLayout.Direction.LeftToRight)
+        for row in getattr(self, 'responsive_rows', []):
+            row.setDirection(direction)
 
     def change_volume(self, volume):
         self.speaker.set_volume(volume)
@@ -225,9 +237,9 @@ class Window(QMainWindow):
         self.log = QTextBrowser()
         self.log.setOpenLinks(False)
         self.log.document().setMaximumBlockCount(400)
-        self.append('Messages appear here after you connect. Test your voice below.')
+        self.append('Messages appear here after you connect. Preview your voice in the Voice tab.')
         layout.addWidget(self.log, 1)
-        test = QGroupBox('Try a message')
+        test = self.test_group = QGroupBox('Preview a message')
         row = QHBoxLayout(test)
         self.sample_name = QLineEdit('Piper')
         self.sample_name.setMaximumWidth(130)
@@ -242,7 +254,7 @@ class Window(QMainWindow):
         layout.addWidget(test)
 
     def build_voice(self):
-        layout = self.page('Voice && filters', scroll=True)
+        layout = self.page('Voice', scroll=True)
         engine_row = QFormLayout()
         self.engine_combo = QComboBox()
         self.engine_combo.addItems(['Piper', 'StyleTTS2 Ukrainian'])
@@ -270,7 +282,6 @@ class Window(QMainWindow):
         self.model_hint.setTextFormat(Qt.TextFormat.PlainText)
         form.addRow(self.model_hint)
         form.addRow('Speaker ID:', self.number('speaker', 0, 999))
-        form.addRow('Maximum characters:', self.number('limit', 20, 1000, 20))
         layout.addWidget(voice)
         self.style_group = QGroupBox('StyleTTS2 · Ukrainian')
         style_form = QFormLayout(self.style_group)
@@ -288,8 +299,7 @@ class Window(QMainWindow):
             else:
                 style_form.addRow(label, combo)
         style_form.addRow(self.check('style_numbers', 'Read numbers as Ukrainian words'))
-        style_form.addRow('Python executable:', self.entry('style_python'))
-        note = QLabel('Install the optional environment from README first. The first test downloads models.\nAuto uses CUDA when available, otherwise CPU. Voices are from patriotyk’s demo.')
+        note = QLabel('31 Ukrainian voices · Auto uses your GPU when available.\nThe first preview may download and load the selected model.')
         note.setWordWrap(True)
         style_form.addRow(note)
         layout.addWidget(self.style_group)
@@ -298,20 +308,26 @@ class Window(QMainWindow):
         layout.addLayout(speed_form)
         self.engine_combo.currentTextChanged.connect(self.select_engine)
         self.select_engine(self.engine_combo.currentText())
+        layout.addWidget(self.test_group)
+        layout.addStretch()
+        layout = self.page('Filters', scroll=True)
+        columns = QHBoxLayout()
+        self.responsive_rows.append(columns)
+        layout.addLayout(columns)
         nicknames = QGroupBox('Nicknames')
         form = QFormLayout(nicknames)
         form.addRow(self.check('names', 'Read nicknames'))
         phrase = self.entry('says')
         phrase.setPlaceholderText('Leave empty to omit “says”')
         form.addRow('After nickname:', phrase)
-        form.addRow(self.check('skip_repeat_names', 'Skip nickname for consecutive messages by the same author'))
+        form.addRow(self.check('skip_repeat_names', 'Skip repeated author names'))
         timeout = self.number('nickname_timeout', 1, 3600, 1, True)
         timeout.setSuffix(' seconds')
         form.addRow('Repeat after idle gap:', timeout)
-        layout.addWidget(nicknames)
+        columns.addWidget(nicknames, 1, Qt.AlignmentFlag.AlignTop)
         filters = QGroupBox('Message filters')
         form = QFormLayout(filters)
-        prefix_toggle = self.check('prefix_only', 'Read only messages starting with this prefix')
+        prefix_toggle = self.check('prefix_only', 'Require a message prefix')
         form.addRow(prefix_toggle)
         prefix_entry = self.entry('message_prefix')
         prefix_entry.setPlaceholderText('%')
@@ -324,7 +340,8 @@ class Window(QMainWindow):
         ignored = self.entry('ignored')
         ignored.setPlaceholderText('Comma-separated usernames')
         form.addRow('Ignore users:', ignored)
-        layout.addWidget(filters)
+        form.addRow('Character limit:', self.number('limit', 20, 1000, 20))
+        columns.addWidget(filters, 1, Qt.AlignmentFlag.AlignTop)
         layout.addStretch()
         self.sync_voice()
 
@@ -359,13 +376,19 @@ class Window(QMainWindow):
         layout.addWidget(note)
 
     def build_setup(self):
-        layout = self.page('Connection && setup', scroll=True)
+        layout = self.page('Preferences', scroll=True)
+        columns = QHBoxLayout()
+        self.responsive_rows.append(columns)
+        left, right = QVBoxLayout(), QVBoxLayout()
+        columns.addLayout(left, 1)
+        columns.addLayout(right, 1)
+        layout.addLayout(columns)
         startup = QGroupBox('Startup and window behavior')
         form = QFormLayout(startup)
-        preload = self.check('preload_engine', 'Load selected engine when the app starts')
+        preload = self.check('preload_engine', 'Preload the selected engine')
         preload.setToolTip('Silently prepares the selected voice. StyleTTS2 stays loaded; Piper warms file caches but starts a new process per message.')
         form.addRow(preload)
-        form.addRow(self.check('auto_connect', 'Auto-connect to the saved channel when the app starts'))
+        form.addRow(self.check('auto_connect', 'Auto-connect to the saved channel'))
         form.addRow(self.check('minimize_to_tray', 'Minimize to the system tray'))
         self.close_action = QComboBox()
         self.close_action.addItems(['Ask every time', 'Close app', 'Minimize to tray'])
@@ -376,7 +399,7 @@ class Window(QMainWindow):
         note = QLabel('Chat and speech continue in the tray. Tray menu → Quit always exits.')
         note.setWordWrap(True)
         form.addRow(note)
-        layout.addWidget(startup)
+        left.addWidget(startup)
         appearance = QGroupBox('Appearance')
         form = QFormLayout(appearance)
         self.appearance = QComboBox()
@@ -385,11 +408,12 @@ class Window(QMainWindow):
         self.appearance.currentTextChanged.connect(self.apply_appearance)
         self.inputs['appearance'] = self.appearance
         form.addRow('Style:', self.appearance)
-        layout.addWidget(appearance)
+        left.addWidget(appearance)
         engine = QGroupBox('Local speech engine')
         form = QFormLayout(engine)
         form.addRow('Piper executable:', self.entry('piper'))
-        layout.addWidget(engine)
+        form.addRow('StyleTTS2 Python:', self.entry('style_python'))
+        right.addWidget(engine)
         login = QGroupBox('Optional Twitch login')
         form = QFormLayout(login)
         note = QLabel('Leave both fields empty for anonymous chat. Tokens are never saved.')
@@ -399,7 +423,15 @@ class Window(QMainWindow):
         self.token.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow('Username:', self.username)
         form.addRow('OAuth token:', self.token)
-        layout.addWidget(login)
+        right.addWidget(login)
+        diagnostics = QGroupBox('OBS audio capture')
+        self.diagnostics_layout = QVBoxLayout(diagnostics)
+        note = QLabel('In OBS, select twitch-piper in Application Audio Capture.\nMatch by app name if needed: Twitch Piper.')
+        note.setWordWrap(True)
+        self.diagnostics_layout.addWidget(note)
+        left.addWidget(diagnostics)
+        left.addStretch()
+        right.addStretch()
         layout.addStretch()
 
     def apply_appearance(self, name):
@@ -464,7 +496,8 @@ class Window(QMainWindow):
         self.fill_voices(group, label)
         if label:
             self.last_voice[group] = label
-        self.model_hint.setText(path)
+        self.model_hint.setText(Path(path).name if path else 'Choose a Piper model to begin.')
+        self.model_hint.setToolTip(path)
 
     def fill_voices(self, group, selected=''):
         labels = sorted((k for k in self.voice_paths if self.voice_groups[k] == group), key=str.casefold)
@@ -483,7 +516,8 @@ class Window(QMainWindow):
         if label not in self.voice_paths:
             return
         self.values['model'] = self.voice_paths[label]
-        self.model_hint.setText(self.values['model'])
+        self.model_hint.setText(Path(self.values['model']).name)
+        self.model_hint.setToolTip(self.values['model'])
         self.inputs['speaker'].setValue(0)
         self.last_voice[self.language_combo.currentText()] = label
 
@@ -522,14 +556,14 @@ class Window(QMainWindow):
         if s['engine'] == 'StyleTTS2 Ukrainian':
             s['style_python'] = shutil.which(os.path.expanduser(s['style_python'])) or ''
             if not s['style_python']:
-                raise ValueError('Install StyleTTS2 using README, then choose its Python executable in Voice & filters.')
+                raise ValueError('Install StyleTTS2 using README, then choose its Python executable in Preferences.')
             if s['style_voice'] not in CATALOG['voices'] or s['style_device'] not in ('Auto', 'CPU', 'CUDA'):
                 raise ValueError('Choose a valid StyleTTS2 voice and device.')
         else:
             s['model'] = str(Path(s['model']).expanduser())
             s['piper'] = shutil.which(os.path.expanduser(s['piper'])) or ''
             if not s['piper']:
-                raise ValueError('Choose an installed Piper executable in Connection & setup.')
+                raise ValueError('Choose an installed Piper executable in Preferences.')
             if not Path(s['model']).is_file() or not Path(s['model'] + '.json').is_file():
                 raise ValueError('Choose a voice with its matching .onnx.json config.')
             config = json.loads(Path(s['model'] + '.json').read_text())
@@ -783,7 +817,7 @@ class Window(QMainWindow):
         dialog.setText('Close the app or keep reading chat in the tray?')
         available = QSystemTrayIcon.isSystemTrayAvailable()
         dialog.setInformativeText(
-            'Minimize to tray keeps chat and speech running. Change this choice later in Connection & setup.'
+            'Minimize to tray keeps chat and speech running. Change this choice later in Preferences.'
             if available else
             'The system tray is unavailable. You can close the app or cancel. Your tray preference will be kept.')
         close_button = dialog.addButton('Close app', QMessageBox.ButtonRole.DestructiveRole)
