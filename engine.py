@@ -18,6 +18,7 @@ import tempfile
 import threading
 import time
 from styletts2_backend import StyleWorker
+from audio_identity import playback_environment
 
 BASE = Path(__file__).resolve().parent
 
@@ -237,6 +238,20 @@ class Chat(threading.Thread):
             delay = min(delay * 2, 60)
 
 
+def playback_command(wav):
+    """Publish stable PulseAudio/PipeWire metadata for OBS application capture."""
+    if shutil.which('paplay'):
+        return [shutil.which('paplay'), '--client-name=Twitch Piper',
+                '--stream-name=Twitch Piper Speech',
+                '--property=application.name=Twitch Piper',
+                '--property=application.id=twitch-piper',
+                '--property=application.process.binary=twitch-piper',
+                '--property=application.icon_name=twitch-piper', wav]
+    if shutil.which('aplay'):
+        return [shutil.which('aplay'), '-q', wav]
+    return [shutil.which('ffplay'), '-nodisp', '-autoexit', '-loglevel', 'error', wav]
+
+
 def adjust_wav_volume(path, volume):
     """Apply app-only gain to Piper's signed 16-bit PCM without system mixer changes."""
     if not 0 <= volume <= 100:
@@ -302,7 +317,8 @@ class Speaker(threading.Thread):
         with self.cv:
             if self.stopped or generation != self.generation:
                 return False
-            self.process = subprocess.Popen(args, stdin=subprocess.PIPE if data is not None else subprocess.DEVNULL,
+            extra = {'env': playback_environment()} if Path(args[0]).name == 'paplay' else {}
+            self.process = subprocess.Popen(args, **extra, stdin=subprocess.PIPE if data is not None else subprocess.DEVNULL,
                                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             process = self.process
         try:
@@ -364,7 +380,7 @@ class Speaker(threading.Thread):
                         with self.cv:
                             volume = self.volume
                         adjust_wav_volume(wav, volume)
-                        player = [shutil.which('aplay'), '-q', wav] if shutil.which('aplay') else [shutil.which('ffplay'), '-nodisp', '-autoexit', '-loglevel', 'error', wav]
+                        player = playback_command(wav)
                         with wave.open(wav, 'rb') as audio:
                             playback_timeout = max(60, audio.getnframes() / audio.getframerate() + 10)
                         self.emit('engine', (engine_name + ' · Playing audio', False))

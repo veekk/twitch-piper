@@ -67,6 +67,8 @@ class Synthesizer:
 
 
 def main():
+    from process_identity import set_process_name
+    set_process_name('twitch-styletts')
     model = None
     for line in sys.stdin:
         request = json.loads(line)

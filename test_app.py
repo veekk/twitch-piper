@@ -25,6 +25,27 @@ class Tests(unittest.TestCase):
         self.assertEqual(speech_text('hello https://example.com world', settings), 'hello world')
         self.assertEqual(speech_text('\x01ACTION waves\x01', settings), 'waves')
         self.assertEqual(len(speech_text('x' * 100, settings)), 30)
+    def test_playback_client_identity_environment(self):
+        from audio_identity import playback_environment
+        from unittest.mock import patch
+        with patch.dict('os.environ', {'PULSE_PROP': 'media.role=music'}):
+            env = playback_environment()
+        self.assertIn('media.role=music', env['PULSE_PROP'])
+        self.assertIn('application.name="Twitch Piper"', env['PULSE_PROP'])
+        self.assertIn('application.process.binary="twitch-piper"', env['PULSE_PROP'])
+
+    def test_obs_playback_identity(self):
+        from engine import playback_command
+        from unittest.mock import patch
+        with patch('engine.shutil.which', side_effect=lambda name: '/usr/bin/' + name):
+            args = playback_command('/tmp/test.wav')
+        self.assertEqual(args[0], '/usr/bin/paplay')
+        self.assertIn('--property=application.process.binary=twitch-piper', args)
+        self.assertIn('--property=application.name=Twitch Piper', args)
+        self.assertEqual(args[-1], '/tmp/test.wav')
+        with patch('engine.shutil.which', side_effect=lambda name: None if name == 'paplay' else '/usr/bin/' + name):
+            self.assertEqual(playback_command('/tmp/test.wav'), ['/usr/bin/aplay', '-q', '/tmp/test.wav'])
+
     def test_required_message_prefix(self):
         settings = dict(commands=False, links=False, limit=100)
         self.assertEqual(speech_text('hello', settings), 'hello')

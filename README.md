@@ -45,7 +45,7 @@ The app in Breeze Light, using default settings and example aliases.
 | Python 3.10+ and PySide6 | Run the app and its Qt interface. Use a Python version supported by your installed dependency packages. |
 | Piper command-line executable | Generate speech. The app accepts `piper-tts`, `piper`, or an absolute executable path. |
 | A Piper `.onnx` model and matching `.onnx.json` file | Supply a voice. Both files must be in the same directory. |
-| `aplay` or `ffplay` | Play generated audio. The app prefers `aplay` when both are installed. |
+| `paplay`, `aplay`, or `ffplay` | Play generated audio. The app prefers `paplay` for a distinct OBS/PipeWire identity. |
 | Internet connection | Read Twitch chat and download dependencies/voices during setup. |
 | Qt 6 Breeze style plugin — optional | Native Breeze controls. The app falls back to Fusion if the plugin is unavailable. |
 
@@ -58,7 +58,7 @@ Development and local verification used EndeavourOS/Arch Linux, Python 3.14, PyS
 **Arch Linux / EndeavourOS:**
 
 ```bash
-sudo pacman -Syu --needed git python python-pip pyside6 breeze alsa-utils
+sudo pacman -Syu --needed git python python-pip pyside6 breeze alsa-utils libpulse
 ```
 
 This provides Qt/PySide6, native Breeze styling, and `aplay`. Piper and a voice are installed below. See the [Arch PySide6 package](https://archlinux.org/packages/extra/x86_64/pyside6/) for package details.
@@ -67,7 +67,7 @@ This provides Qt/PySide6, native Breeze styling, and `aplay`. Piper and a voice 
 
 ```bash
 sudo apt update
-sudo apt install git python3 python3-venv python3-pip alsa-utils
+sudo apt install git python3 python3-venv python3-pip alsa-utils pulseaudio-utils
 ```
 
 Install PySide6 in the virtual environment below. For native Breeze, prefer matching distribution packages for PySide6 and the **Qt 6** Breeze style plugin when your release provides them. Pip’s PySide6 includes its own Qt libraries, so a distribution’s Breeze plugin may not load with it; Fusion is the fallback. See [Qt for Python installation guidance](https://doc.qt.io/qtforpython-6/gettingstarted.html).
@@ -206,6 +206,8 @@ The voice catalog records the demo revision in `styletts2_voices.json`. Dependen
 
 Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply your Twitch username and a user OAuth token with `chat:read` under **Connection & setup**. Obtain tokens through [Twitch’s authorization flow](https://dev.twitch.tv/docs/authentication/getting-tokens-oauth/); the app does not include a login/token generator. Credentials are not saved, so auto-connect after restarting uses anonymous access.
 
+The Linux process names are `twitch-piper` for the interface and `twitch-styletts` for the StyleTTS2 worker. The command line may still show the Python interpreter; installing optional `setproctitle` in each Python environment also updates that title.
+
 ## Controls and settings
 
 - **Pause** interrupts the current utterance, holds pending messages, and stops queuing incoming chat until Resume. **Skip** interrupts the current utterance; **Clear queue** also discards pending messages.
@@ -237,6 +239,12 @@ cp twitch-piper.desktop "$HOME/.local/share/applications/twitch-piper.desktop"
 ```
 
 The launcher should then appear in your desktop’s application menu.
+
+## OBS application audio capture
+
+With `paplay` installed (Arch: `libpulse`; Debian/Ubuntu: `pulseaudio-utils`), playback identifies itself as **Twitch Piper**, executable identity **twitch-piper**, stream **Twitch Piper Speech**. This works through PulseAudio or PipeWire’s PulseAudio compatibility service. The app chooses this player before `aplay` and `ffplay`.
+
+The app keeps a persistent audio client connected from startup, and its playback clients and streams share the same identity. Restart the app and check that its status reads **OBS audio identity · twitch-piper**. Reopen OBS **Application Audio Capture (PipeWire)** properties and select **twitch-piper**, even while the app is idle. If needed, choose match by app name and select **Twitch Piper**. Speech still plays in a child process, but OBS matches it to the shared identity. Avoid selecting the old generic `aplay` stream. If the status reports unavailable or disconnected, check that the app and OBS can access the same user audio service.
 
 ## Troubleshooting
 

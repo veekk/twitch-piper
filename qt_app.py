@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
     QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
     QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea, QSlider, QSpinBox, QStyleFactory,
     QSystemTrayIcon, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
+from audio_identity import AudioIdentity
 from resource_monitor import ResourceMonitor
 from styletts2_backend import CATALOG
 from engine import BASE, Chat, Speaker, channel_name, parse_aliases, speech_text, voice_language_group
@@ -151,6 +152,10 @@ class Window(QMainWindow):
         engine_row.addWidget(self.engine_status, 1)
         engine_row.addWidget(self.engine_progress)
         layout.addLayout(engine_row)
+        self.audio_identity = AudioIdentity()
+        self.audio_identity_label = QLabel(self.audio_identity.status())
+        self.audio_identity_label.setWordWrap(True)
+        layout.addWidget(self.audio_identity_label)
         self.resources = ResourceMonitor()
         self.load_label = QLabel(self.resources.latest)
         self.load_label.setWordWrap(True)
@@ -520,8 +525,8 @@ class Window(QMainWindow):
             config = json.loads(Path(s['model'] + '.json').read_text())
             if not 0 <= s['speaker'] < config.get('num_speakers', 1):
                 raise ValueError('Speaker ID is not available in this voice. Try 0.')
-        if not (shutil.which('aplay') or shutil.which('ffplay')):
-            raise ValueError('Install aplay or ffplay for audio playback.')
+        if not (shutil.which('paplay') or shutil.which('aplay') or shutil.which('ffplay')):
+            raise ValueError('Install paplay (recommended for OBS), aplay, or ffplay for audio playback.')
         return s
 
     def save(self):
@@ -611,6 +616,7 @@ class Window(QMainWindow):
         self.log.append(prefix + html.escape(text))
 
     def poll(self):
+        self.audio_identity_label.setText(self.audio_identity.status())
         self.load_label.setText(self.resources.latest)
         for _ in range(100):
             try:
@@ -826,6 +832,7 @@ class Window(QMainWindow):
         self._closing = True
         self.startup_timer.stop()
         self.resources.close()
+        self.audio_identity.close()
         self.tray.hide()
         self.timer.stop()
         if self.chat:
@@ -838,6 +845,8 @@ class Window(QMainWindow):
 
 
 def main():
+    from process_identity import set_process_name
+    set_process_name('twitch-piper')
     application = QApplication(sys.argv)
     application.setApplicationName('Twitch Piper')
     application.setDesktopFileName('twitch-piper')
