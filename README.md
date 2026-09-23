@@ -1,11 +1,11 @@
 # Twitch × Piper
 
-A Linux desktop app that reads Twitch chat aloud using local [Piper TTS](https://github.com/OHF-Voice/piper1-gpl). Built with Qt and KDE Breeze styling. Speech is generated on your computer; no cloud TTS account or paid API key is needed.
+A Linux desktop app that reads Twitch chat aloud using local [Piper TTS](https://github.com/OHF-Voice/piper1-gpl) or optional Ukrainian [StyleTTS2](https://huggingface.co/spaces/patriotyk/styletts2-ukrainian). Built with Qt and KDE Breeze styling. Speech is generated on your computer; no cloud TTS account or paid API key is needed.
 
 ## Features
 
 - Read a Twitch channel with automatic reconnection and optional auto-connect at startup.
-- Choose one Piper voice, with voices grouped by language.
+- Choose Piper voices grouped by language, or 31 Ukrainian StyleTTS2 voice presets.
 - Adjust speed, volume, speaker ID, and message length.
 - Customize nickname pronunciation, word aliases, and the “says” phrase.
 - Suppress repeated nicknames, commands, links, or selected users.
@@ -148,6 +148,54 @@ python3 app.py
 
 You can also run `bash run.sh`. It uses the `python3` on your current `PATH`; it does **not** activate `.venv` automatically. Launch as your normal desktop user, not with `sudo`.
 
+## Optional: Ukrainian StyleTTS2
+
+Uses the **multispeaker HiFi-GAN model and 31 voice presets from patriotyk’s demo**. All synthesis runs locally. Piper remains the default and needs none of these extra packages.
+
+Install a separate **Python 3.12** environment to match the demo dependencies. If Python 3.12 is already installed:
+
+```bash
+python3.12 -m venv .venv-styletts2
+.venv-styletts2/bin/python -m pip install --upgrade pip
+.venv-styletts2/bin/python -m pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+.venv-styletts2/bin/python -m pip install -r requirements-styletts2.txt
+```
+
+If your distribution does not provide Python 3.12, [install uv](https://docs.astral.sh/uv/getting-started/installation/), then use:
+
+```bash
+uv python install 3.12
+uv venv --python 3.12 .venv-styletts2
+uv pip install --python .venv-styletts2/bin/python torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+uv pip install --python .venv-styletts2/bin/python -r requirements-styletts2.txt
+```
+
+Git is required for the pinned upstream packages. These commands install CPU PyTorch; for NVIDIA acceleration, use matching **torch/torchaudio 2.8.0** CUDA wheels appropriate to your driver instead, following [PyTorch’s version instructions](https://pytorch.org/get-started/previous-versions/).
+
+To switch an existing CPU installation to CUDA 12.8 (with a compatible NVIDIA GPU and driver):
+
+```bash
+uv pip install --python .venv-styletts2/bin/python --reinstall-package torch --reinstall-package torchaudio 'torch==2.8.0+cu128' 'torchaudio==2.8.0+cu128' --index-url https://download.pytorch.org/whl/cu128
+.venv-styletts2/bin/python -c "import torch; print(torch.__version__, torch.version.cuda); print('GPU available:', torch.cuda.is_available())"
+```
+
+Run the check in your desktop terminal; restricted sandboxes may hide GPU devices. Quit the app completely (including its tray icon) and reopen it after changing PyTorch packages. Select **CUDA** or **Auto** in the device selector. If GPU availability is false in your desktop terminal too, check `nvidia-smi` before troubleshooting the app.
+
+Launch the app using its usual Python environment. In **Voice & filters**:
+
+1. Select **Speech engine → StyleTTS2 Ukrainian**.
+2. Choose a voice and **Auto**, **CPU**, or **CUDA**. Auto selects CUDA only when available to the worker.
+3. Leave **Python executable** pointing to `.venv-styletts2/bin/python`, or enter the absolute path to your own environment’s Python.
+4. Use **Read test** with Ukrainian text, such as `Привіт! Дякую за повідомлення.`, then save settings.
+
+The first test downloads the speech model, stress-processing resources, and selected voice preset. Allow several minutes and several GB of disk space. By default caches live in `.cache-styletts2/` beside the app; existing `HF_HOME`, `STANZA_RESOURCES_DIR`, `TORCH_HOME`, and `NUMBA_CACHE_DIR` settings are respected. A newly selected voice may need a small additional download. Cached assets support subsequent local use.
+
+The worker keeps its model loaded between messages. Skip/Pause during synthesis terminates the worker; the next message reloads it from cache. CPU latency depends on your hardware. Speed is limited to the demo’s 0.7–1.3 range. The app uses automatic Ukrainian stress placement and supports `+` after a stressed vowel. Foreign nicknames may need Ukrainian pronunciation aliases. Enable **Read numbers as Ukrainian words** (on by default) to expand numbers before stress placement and synthesis. Integers and space-grouped thousands are read as words; decimal fractions and leading-zero codes are read digit by digit (`12,05` → `дванадцять кома нуль п’ять`). Dates are read as numeric components, not calendar phrases; grammatical agreement with surrounding nouns and acronym expansion are not provided. The original chat text is preserved. Existing installations need `uv pip install --python .venv-styletts2/bin/python num2words==0.5.14` and a full app restart. The demo’s separate beta verbalizer and voice cloning are not included.
+
+![Ukrainian StyleTTS2 engine and voice presets](assets/screenshots/styletts2.png)
+
+The voice catalog records the demo revision in `styletts2_voices.json`. Dependencies are pinned in `requirements-styletts2.txt`; upstream model and voice licenses continue to apply. Source: [demo implementation](https://huggingface.co/spaces/patriotyk/styletts2-ukrainian/blob/main/app.py), [inference library](https://github.com/patriotyk/styletts2-inference).
+
 ## First use
 
 1. In **Connection & setup**, check **Piper executable**. For the pip installation, use the absolute path printed by `command -v piper` in the activated environment. If both commands are installed, the app initially prefers `piper-tts`.
@@ -161,6 +209,7 @@ Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply 
 ## Controls and settings
 
 - **Pause** interrupts the current utterance, holds pending messages, and stops queuing incoming chat until Resume. **Skip** interrupts the current utterance; **Clear queue** also discards pending messages.
+- **App load** shows CPU, RAM, NVIDIA GPU activity, and VRAM for the app and its child processes, including the speech worker. CPU 100% means one logical core; RAM is summed resident memory and may double-count shared pages. GPU metrics use `nvidia-smi` per-process statistics; unsupported or inaccessible metrics display **N/A**. Sampling runs in the background roughly every 1–4 seconds.
 - **Volume** ranges from 0–100%; zero mutes. Changes apply when the next message starts playing, including messages already queued.
 - **Remove leading %** removes only that first sign; the remaining message is still read.
 - **After nickname** replaces “says”; leave it blank to omit the phrase.
@@ -170,7 +219,7 @@ Anonymous, read-only chat is attempted by default. If Twitch rejects it, supply 
 - **To tray** keeps speech running in the background. Enable **Minimize to the system tray** to give the window’s Minimize button the same behavior.
 - Closing asks whether to quit or minimize, with **Remember my choice**. Change this later using **When closing the window** in settings. Tray-menu **Quit** always exits.
 
-The queue holds the newest 30 messages and drops messages older than 45 seconds before synthesis. Moderation deletion/clear events stop speech and clear the queue. One selected voice reads all messages; language grouping is for voice selection, not automatic language detection.
+The queue holds the newest 30 messages and drops messages older than 45 seconds before synthesis. Moderation deletion/clear events stop speech and clear the queue. One selected engine and voice read all messages; language grouping is for voice selection, not automatic language detection.
 
 ## Application-menu launcher (optional)
 
@@ -193,6 +242,7 @@ The launcher should then appear in your desktop’s application menu.
 | --- | --- |
 | `No module named PySide6` | Activate the environment where PySide6 is installed, or install it using the appropriate instructions above. |
 | No voices appear | Download both `.onnx` and `.onnx.json`, then restart or use **Browse…**. |
+| StyleTTS2 reports a missing module | Install `requirements-styletts2.txt` in the exact Python environment selected under Voice & filters. |
 | Piper cannot be found | Set its absolute executable path in **Connection & setup**; do not enter `python3 -m piper` in that field. |
 | Piper rejects an option | Run `piper --help` or `piper-tts --help`. The app requires `-m`, `-f`, `-s`, and `--length_scale`, with text on stdin. |
 | No sound | Resume playback, raise app/system volume, and inspect the chat log for playback errors. Test system audio with `aplay /path/to/test.wav`. |
@@ -215,4 +265,4 @@ QT_QPA_PLATFORM=offscreen python3 -m unittest -v
 
 The tests include Qt UI checks and expect local Piper/voice dependencies; the Breeze-specific test expects the Breeze plugin. Audio generation and real desktop playback should also be checked manually with **Read test**. Tests do not establish a live Twitch connection.
 
-When publishing the repository, include the source files and `assets/`, but exclude `.venv/`, `settings.json`, temporary WAV files, and downloaded voice models. There is no repository-specific dependency lockfile; installation commands above install the versions available for your system.
+When publishing the repository, include the source files and `assets/`, but exclude `.venv/`, `.venv-styletts2/`, `.cache-styletts2/`, `settings.json`, temporary WAV files, and downloaded voice models. There is no repository-specific dependency lockfile; installation commands above install the versions available for your system.

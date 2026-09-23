@@ -254,6 +254,35 @@ class BreezeTests(unittest.TestCase):
         self.window.append('<img src="bad">', '<b>name</b>')
         self.assertIn('<b>name</b>: <img src="bad">', self.window.log.toPlainText())
 
+    def test_styletts2_settings_without_piper(self):
+        import sys
+        self.window.engine_combo.setCurrentText('StyleTTS2 Ukrainian')
+        self.window.inputs['style_python'].setText(sys.executable)
+        self.window.inputs['piper'].setText('/missing-piper')
+        self.window.values['model'] = '/missing-model'
+        self.window.inputs['style_voice'].setCurrentIndex(5)
+        self.window.inputs['style_device'].setCurrentText('CPU')
+        self.assertTrue(self.window.inputs['style_numbers'].isChecked())
+        self.window.inputs['style_numbers'].setChecked(False)
+        self.assertTrue(self.window.piper_group.isHidden())
+        self.assertFalse(self.window.style_group.isHidden())
+        settings = self.window.settings()
+        self.assertEqual(settings['engine'], 'StyleTTS2 Ukrainian')
+        self.assertEqual(settings['style_device'], 'CPU')
+        self.window.save()
+        saved = json.loads(self.path.read_text())
+        self.assertEqual(saved['style_voice'], settings['style_voice'])
+        self.assertFalse(saved['style_numbers'])
+        self.window.engine_combo.setCurrentText('Piper')
+        with self.assertRaisesRegex(ValueError, 'Piper executable'):
+            self.window.settings()
+
+    def test_styletts2_missing_environment(self):
+        self.window.engine_combo.setCurrentText('StyleTTS2 Ukrainian')
+        self.window.inputs['style_python'].setText('/missing-style-python')
+        with self.assertRaisesRegex(ValueError, 'Install StyleTTS2'):
+            self.window.settings()
+
 
 if __name__ == '__main__':
     unittest.main()

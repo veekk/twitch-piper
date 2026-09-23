@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from styletts2_backend import StyleWorker
 
 BASE = Path(__file__).resolve().parent
 
@@ -264,6 +265,7 @@ class Speaker(threading.Thread):
         self.paused = False
         self.generation = 0
         self.process = None
+        self.style_worker = StyleWorker()
         self.volume = 100
         self.nickname_history = NicknameHistory()
         self.start()
@@ -318,6 +320,7 @@ class Speaker(threading.Thread):
             with self.cv:
                 self.cv.wait_for(lambda: self.stopped or (self.items and not self.paused))
                 if self.stopped:
+                    self.style_worker.close()
                     return
                 created, text, settings = self.items.popleft()
                 generation = self.generation
@@ -331,9 +334,23 @@ class Speaker(threading.Thread):
                 self.emit('speech', text)
                 with tempfile.TemporaryDirectory(prefix='twitch-piper-') as temp:
                     wav = str(Path(temp) / 'speech.wav')
-                    args = [settings['piper'], '-m', settings['model'], '-f', wav,
-                            '--length_scale', str(1 / settings['speed']), '-s', str(settings['speaker'])]
-                    if self.execute(args, generation, (text + '\n').encode()):
+                    if settings.get('engine', 'Piper') == 'StyleTTS2 Ukrainian':
+                        with self.cv:
+                            if self.stopped or generation != self.generation:
+                                continue
+                            self.process = self.style_worker.start(settings['style_python'], settings['style_device'])
+                        try:
+                            ready = self.style_worker.generate(text, settings, wav,
+                                lambda: self.stopped or generation != self.generation)
+                        finally:
+                            with self.cv:
+                                self.process = None
+                    else:
+                        self.style_worker.close()
+                        args = [settings['piper'], '-m', settings['model'], '-f', wav,
+                                '--length_scale', str(1 / settings['speed']), '-s', str(settings['speaker'])]
+                        ready = self.execute(args, generation, (text + '\n').encode())
+                    if ready:
                         with self.cv:
                             volume = self.volume
                         adjust_wav_volume(wav, volume)
@@ -354,4 +371,3 @@ class Speaker(threading.Thread):
             self.stopped = True
             self.clear()
             self.cv.notify_all()
-

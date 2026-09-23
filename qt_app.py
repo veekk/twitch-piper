@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDoubleSpinBo
     QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu,
     QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSlider, QSpinBox, QStyleFactory,
     QSystemTrayIcon, QTabWidget, QTextBrowser, QVBoxLayout, QWidget)
+from resource_monitor import ResourceMonitor
+from styletts2_backend import CATALOG
 from engine import BASE, Chat, Speaker, channel_name, parse_aliases, speech_text, voice_language_group
 
 
@@ -46,7 +48,8 @@ class Window(QMainWindow):
             saved = {}
         paths = sorted(p for p in (Path.home() / 'Downloads/piper-voices').rglob('*.onnx') if Path(str(p) + '.json').is_file())
         default = next((str(p) for p in paths if p.name == 'en_US-lessac-medium.onnx'), str(paths[0]) if paths else '')
-        self.values = dict(channel='', model=default, piper=shutil.which('piper-tts') or shutil.which('piper') or '',
+        self.values = dict(engine='Piper', style_voice=CATALOG['voices'][0],
+            style_python=str(BASE / '.venv-styletts2/bin/python'), style_device='Auto', style_numbers=True, channel='', model=default, piper=shutil.which('piper-tts') or shutil.which('piper') or '',
             speed='1.0', speaker='0', limit='280', ignored='nightbot, streamelements, moobot', names=True,
             commands=True, links=True, strip_percent=False, says='says', nickname_aliases='', word_aliases='',
             skip_repeat_names=True, nickname_timeout='15', appearance='Plasma (system)', volume=100,
@@ -133,6 +136,13 @@ class Window(QMainWindow):
         self.now = QLabel('Speech idle')
         self.now.setWordWrap(True)
         layout.addWidget(self.now)
+        self.resources = ResourceMonitor()
+        self.load_label = QLabel(self.resources.latest)
+        self.load_label.setWordWrap(True)
+        self.load_label.setToolTip('App and child processes, including the speech worker. CPU: 100% = one logical core. '
+            'RAM: summed resident memory (shared pages may be counted twice). GPU: NVIDIA per-process SM utilization; '
+            'VRAM: GPU memory. N/A means unavailable or unsupported. Samples update about every 1–4 seconds.')
+        layout.addWidget(self.load_label)
         self.apply_appearance(self.values['appearance'])
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.poll)
@@ -213,7 +223,15 @@ class Window(QMainWindow):
 
     def build_voice(self):
         layout = self.page('Voice && filters', scroll=True)
-        voice = QGroupBox('Voice')
+        engine_row = QFormLayout()
+        self.engine_combo = QComboBox()
+        self.engine_combo.addItems(['Piper', 'StyleTTS2 Ukrainian'])
+        self.engine_combo.setCurrentText(self.values['engine'])
+        self.inputs['engine'] = self.engine_combo
+        engine_row.addRow('Speech engine:', self.engine_combo)
+        layout.addLayout(engine_row)
+        voice = QGroupBox('Piper voice')
+        self.piper_group = voice
         form = QFormLayout(voice)
         self.language_combo = QComboBox()
         self.voice_combo = QComboBox()
@@ -230,10 +248,29 @@ class Window(QMainWindow):
         self.model_hint.setWordWrap(True)
         self.model_hint.setTextFormat(Qt.TextFormat.PlainText)
         form.addRow(self.model_hint)
-        form.addRow('Speed:', self.number('speed', .5, 2, .1, True))
         form.addRow('Speaker ID:', self.number('speaker', 0, 999))
         form.addRow('Maximum characters:', self.number('limit', 20, 1000, 20))
         layout.addWidget(voice)
+        self.style_group = QGroupBox('StyleTTS2 · Ukrainian')
+        style_form = QFormLayout(self.style_group)
+        for key, label, items in [('style_voice', 'Voice:', CATALOG['voices']),
+                                  ('style_device', 'Device:', ['Auto', 'CPU', 'CUDA'])]:
+            combo = QComboBox()
+            combo.addItems(items)
+            combo.setCurrentText(self.values[key])
+            self.inputs[key] = combo
+            style_form.addRow(label, combo)
+        style_form.addRow(self.check('style_numbers', 'Read numbers as Ukrainian words'))
+        style_form.addRow('Python executable:', self.entry('style_python'))
+        note = QLabel('Install the optional environment from README first. The first test downloads models.\nAuto uses CUDA when available, otherwise CPU. Voices are from patriotyk’s demo.')
+        note.setWordWrap(True)
+        style_form.addRow(note)
+        layout.addWidget(self.style_group)
+        speed_form = QFormLayout()
+        speed_form.addRow('Speed:', self.number('speed', .5, 2, .1, True))
+        layout.addLayout(speed_form)
+        self.engine_combo.currentTextChanged.connect(self.select_engine)
+        self.select_engine(self.engine_combo.currentText())
         nicknames = QGroupBox('Nicknames')
         form = QFormLayout(nicknames)
         form.addRow(self.check('names', 'Read nicknames'))
@@ -255,6 +292,18 @@ class Window(QMainWindow):
         layout.addWidget(filters)
         layout.addStretch()
         self.sync_voice()
+
+    def select_engine(self, engine):
+        style = engine == 'StyleTTS2 Ukrainian'
+        self.piper_group.setVisible(not style)
+        self.style_group.setVisible(style)
+        self.inputs['speed'].setRange(.7 if style else .5, 1.3 if style else 2)
+        english = 'Hello! Twitch chat is ready to read aloud with Piper.'
+        ukrainian = 'Привіт! Дякую за повідомлення. Український голос готовий до роботи.'
+        if self.sample.text() in (english, ukrainian):
+            self.sample.setText(ukrainian if style else english)
+        if self.sample_name.text() in ('Piper', 'Пайпер'):
+            self.sample_name.setText('Пайпер' if style else 'Piper')
 
     def build_aliases(self):
         layout = self.page('Aliases')
@@ -317,11 +366,9 @@ class Window(QMainWindow):
 
     def apply_appearance(self, name):
         application = QApplication.instance()
-        breeze = QStyleFactory.create('Breeze')
-        if breeze:
-            application.setStyle(breeze)
-        else:
-            application.setStyle('Fusion')
+        style_name = 'Breeze' if 'breeze' in {name.lower() for name in QStyleFactory.keys()} else 'Fusion'
+        if application.style().objectName().lower() != style_name.lower():
+            application.setStyle(style_name)
         config = configparser.ConfigParser(interpolation=None, strict=False)
         if name == 'Plasma (system)':
             config.read(Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'kdeglobals')
@@ -432,15 +479,22 @@ class Window(QMainWindow):
         s.update(speed=float(s['speed']), speaker=int(s['speaker']), limit=int(s['limit']), nickname_timeout=float(s['nickname_timeout']))
         if not .5 <= s['speed'] <= 2 or not 20 <= s['limit'] <= 1000 or not 1 <= s['nickname_timeout'] <= 3600:
             raise ValueError('Check speed, message length, and nickname timeout.')
-        s['model'] = str(Path(s['model']).expanduser())
-        s['piper'] = shutil.which(os.path.expanduser(s['piper'])) or ''
-        if not s['piper']:
-            raise ValueError('Choose an installed Piper executable in Connection & setup.')
-        if not Path(s['model']).is_file() or not Path(s['model'] + '.json').is_file():
-            raise ValueError('Choose a voice with its matching .onnx.json config.')
-        config = json.loads(Path(s['model'] + '.json').read_text())
-        if not 0 <= s['speaker'] < config.get('num_speakers', 1):
-            raise ValueError('Speaker ID is not available in this voice. Try 0.')
+        if s['engine'] == 'StyleTTS2 Ukrainian':
+            s['style_python'] = shutil.which(os.path.expanduser(s['style_python'])) or ''
+            if not s['style_python']:
+                raise ValueError('Install StyleTTS2 using README, then choose its Python executable in Voice & filters.')
+            if s['style_voice'] not in CATALOG['voices'] or s['style_device'] not in ('Auto', 'CPU', 'CUDA'):
+                raise ValueError('Choose a valid StyleTTS2 voice and device.')
+        else:
+            s['model'] = str(Path(s['model']).expanduser())
+            s['piper'] = shutil.which(os.path.expanduser(s['piper'])) or ''
+            if not s['piper']:
+                raise ValueError('Choose an installed Piper executable in Connection & setup.')
+            if not Path(s['model']).is_file() or not Path(s['model'] + '.json').is_file():
+                raise ValueError('Choose a voice with its matching .onnx.json config.')
+            config = json.loads(Path(s['model'] + '.json').read_text())
+            if not 0 <= s['speaker'] < config.get('num_speakers', 1):
+                raise ValueError('Speaker ID is not available in this voice. Try 0.')
         if not (shutil.which('aplay') or shutil.which('ffplay')):
             raise ValueError('Install aplay or ffplay for audio playback.')
         return s
@@ -532,6 +586,7 @@ class Window(QMainWindow):
         self.log.append(prefix + html.escape(text))
 
     def poll(self):
+        self.load_label.setText(self.resources.latest)
         for _ in range(100):
             try:
                 kind, value, session = self.events.get_nowait()
@@ -736,6 +791,7 @@ class Window(QMainWindow):
             return
         self._closing = True
         self.startup_timer.stop()
+        self.resources.close()
         self.tray.hide()
         self.timer.stop()
         if self.chat:

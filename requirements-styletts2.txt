@@ -1,0 +1,10 @@
+# Match the demo's inference runtime. Use Python 3.12 in a separate environment.
+torch==2.8.0
+torchaudio==2.8.0
+transformers==5.0.0
+numpy<2
+soundfile
+git+https://github.com/patriotyk/styletts2-inference@209352700cf703a05ff94501290095dd9072fd5f
+git+https://github.com/patriotyk/ukrainian-word-stress@d5b37ea0abe9711930d9c3b0b13edec5a0675512
+git+https://github.com/patriotyk/ipa-uk@3faf05ec50fd4880965b6c76f8e479a4f82117f5
+num2words==0.5.14
