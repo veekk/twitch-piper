@@ -12,6 +12,31 @@ A Linux desktop app that reads Twitch chat aloud using local [Piper TTS](https:/
 - Pause, skip, clear the queue, and run in the system tray.
 - Use Plasma colors, Breeze Light, or Breeze Dark.
 
+## Screenshots
+
+The app in Breeze Light, using default settings and example aliases.
+
+**Chat and playback controls**
+
+![Chat tab with voice test, playback controls, and volume slider](assets/screenshots/chat.png)
+
+<details>
+<summary>Voice selection, filters, aliases, and settings</summary>
+
+**Voices grouped by language, nickname options, and message filters**
+
+![Voice and filters tab](assets/screenshots/voice-filters.png)
+
+**Nickname and word aliases**
+
+![Aliases tab with example pronunciation replacements](assets/screenshots/aliases.png)
+
+**Startup, system tray, appearance, and connection settings**
+
+![Connection and setup tab](assets/screenshots/settings.png)
+
+</details>
+
 ## Prerequisites
 
 | Requirement | Purpose |
