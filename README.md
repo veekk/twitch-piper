@@ -214,6 +214,14 @@ The Linux process names are `twitch-piper` for the interface and `twitch-stylett
 
 Only one app instance runs per Linux user. Launching it again restores the existing window, including from the tray. The operating system releases the instance lock if the app crashes.
 
+## Interface language
+
+Choose **Preferences → Appearance → Interface language → Українська**, click **Save settings**, and fully restart the app. English remains the default. Interface language does not change the speech engine, voice, chat text, aliases, or the configured “says” phrase. External library errors and system file dialogs may use their original/system language.
+
+![Ukrainian interface](assets/screenshots/ukrainian.png)
+
+Additional languages use JSON catalogs; only English and Ukrainian are currently translated. See [localization instructions](locales/README.md). Missing translations fall back to English, and saved setting identifiers remain language-independent.
+
 ## Controls and settings
 
 - **Pause** interrupts the current utterance, holds pending messages, and stops queuing incoming chat until Resume. **Skip** interrupts the current utterance; **Clear queue** also discards pending messages.
